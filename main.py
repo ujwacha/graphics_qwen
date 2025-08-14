@@ -52,8 +52,8 @@ def generate_sphere(radius, sectors, stacks):
             y = radius * np.cos(phi)
             z = radius * np.sin(phi) * np.sin(theta)
 
-            u = 1 - (j / sectors)
-            v = 1 - (i / stacks)
+            u = j / sectors
+            v = i / stacks
 
             vertices.extend([x, y, z])
             tex_coords.extend([u, v])
@@ -131,6 +131,9 @@ def main():
     texture = load_texture("earth_texture.jpg")  # Replace with your actual path
 
     glEnable(GL_DEPTH_TEST)
+    glEnable(GL_CULL_FACE)
+    glCullFace(GL_BACK)
+    glFrontFace(GL_CCW)
 
     projection = np.array([
         [1.0, 0.0, 0.0, 0.0],
@@ -139,9 +142,15 @@ def main():
         [0.0, 0.0, -0.2, 0.0]
     ], dtype=np.float32)
 
-    view = np.eye(4, dtype=np.float32)
+    # Move camera back and up slightly
+    view = np.array([
+        [1.0, 0.0, 0.0, 0.0],
+        [0.0, 1.0, 0.0, -0.5],
+        [0.0, 0.0, 1.0, -3.0],
+        [0.0, 0.0, 0.0, 1.0]
+    ], dtype=np.float32)
+    
     model = np.eye(4, dtype=np.float32)
-
     angle = 0.0
 
     while not glfw.window_should_close(window):
