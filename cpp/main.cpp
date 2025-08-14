@@ -112,8 +112,8 @@ static std::vector<float> ndata; // normals
 static std::vector<float> tdata; // texcoords
 static std::vector<unsigned int> idata; // indices
 
-static int meshStacks = 128;
-static int meshSlices = 256;
+static int meshStacks = 512;
+static int meshSlices = 1024;
 
 GLuint loadTexture(const char *filename) {
   // DON'T flip here; we will handle texcoord orientation in the mesh.
