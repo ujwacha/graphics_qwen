@@ -1,0 +1,150 @@
+\documentclass[11pt]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{geometry}
+\usepackage{hyperref}
+\usepackage{color}
+\usepackage{graphicx}
+\usepackage{parskip}
+\usepackage{verbatim}
+\usepackage{amsmath}
+\geometry{margin=1in}
+
+\title{Earth Heightmap Project}
+\author{}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\section*{Summary}
+This project renders an interactive, textured Earth using legacy OpenGL (GLUT / GLU) and applies a \textbf{heightmap-based displacement} to the sphere so mountains, trenches and other relief features appear on the globe. It also provides a runtime menu to swap colormap textures and displays a small legend (``bar'') overlay when available. The code uses \verb|stb_image.h| to load image files.
+
+The implementation emphasizes correctness and robustness: consistent texture/heightmap orientation, smoothed height sampling to avoid spikes at the poles and seams, and proper normals computed after displacement so lighting looks good.
+
+\bigskip
+\hrule
+\bigskip
+
+\section{Features}
+\begin{itemize}
+  \item Equirectangular color texture mapped onto a sphere.
+  \item Heightmap (grayscale) interpreted as elevation and used to displace sphere vertices along normals.
+  \item Smooth normals computed via central differences to preserve shading quality.
+  \item Runtime right-click menu to switch the color texture among several files.
+  \item Automatic loading and display of \verb|<basename>_Bar.png| overlay legend for color textures (if the file exists).
+  \item Interactive controls: free rotation (left-drag), zoom (mouse wheel), autorotate, reset, heightmap toggles and orientation fixes.
+  \item Runtime toggles for correcting orientation mismatches: flip vertical/horizontal, transpose (swap u/v), 180° longitude offset, smoothing on/off.
+\end{itemize}
+
+\section{Files (typical)}
+\begin{itemize}
+  \item \verb|main.cpp| — full program source (OpenGL + GLUT + \verb|stb_image|).
+  \item \verb|stb_image.h| — single-header image loader.
+  \item \verb|earth.png| — default color texture.
+  \item \verb|earth_elevation_grayscale.png| — grayscale heightmap (white = high).
+  \item \verb|DayTemp.png|, \verb|Rainfall.png|, \verb|SeaSurfaceTemp.png|, \verb|LeafAreaIndex.png| — example alternative color textures.
+  \item \verb|DayTemp_Bar.png|, \verb|Rainfall_Bar.png|, etc. — optional legend/scale images for the corresponding textures.
+\end{itemize}
+
+\section{How it works (technical overview)}
+
+\subsection*{Mesh}
+A latitude--longitude mesh is generated with \texttt{stacks} (latitude) and \texttt{slices} (longitude). For each \((u,v)\) in \([0,1]\times[0,1]\) (where \(u\) maps to longitude and \(v\) maps to latitude, with \(v=0\) = north pole and \(v=1\) = south pole) the code computes:
+\begin{enumerate}
+  \item Sample height \(h(u,v)\) from the heightmap (bilinear interpolation).
+  \item Convert \((u,v)\) to spherical coordinates \((\theta,\phi)\) and an un-displaced direction \((x,y,z)\).
+  \item Displace radius:
+  \[
+    \text{rad} = \text{baseRadius} + (h - 0.5)\cdot 2 \cdot \text{heightScale},
+  \]
+  so a heightmap value of \(0.5\) means no displacement.
+  \item Position \(= \text{direction} \times \text{rad}\).
+\end{enumerate}
+
+\subsection*{Normals}
+Normals are computed per-vertex using \textbf{central differences} in texture space: sample displaced positions at \((u+\Delta u,v)\) and \((u-\Delta u,v)\) and at \((u,v+\Delta v)\) and \((u,v-\Delta v)\). The cross product of these tangent vectors yields a stable normal suitable for lighting.
+
+\subsection*{Height sampling orientation}
+Heightmap sampling supports transformations to fix orientation mismatches:
+\begin{itemize}
+  \item \texttt{transpose} — swap \(u\) and \(v\) when sampling (for datasets stored transposed).
+  \item \texttt{flip} (U / V) — horizontal/vertical flips of the heightmap sampling.
+  \item \texttt{uOffset} — add 0.5 (180° longitude) to fix half-rotation mismatches.
+  \item \texttt{smoothing} — average center + neighbors to reduce spikes and seams.
+\end{itemize}
+These are provided as runtime keyboard toggles so you can align the heightmap to the color texture without modifying the image files.
+
+\subsection*{Texture swapping \& overlays}
+A GLUT popup menu (right-click) lists available color textures. Selecting a texture loads it as the sphere's diffuse map. The program automatically attempts to find a corresponding bar image named \verb|<basename>_Bar.png| and displays it as an overlay (bottom-right) if found.
+
+\section{Controls (runtime)}
+\begin{itemize}
+  \item Left-drag: manual free rotation.
+  \item Mouse wheel: zoom in/out.
+  \item \verb|'a'|: toggle autorotate on/off.
+  \item \verb|'p'|: toggle autorotate axis perpendicular-to-current.
+  \item \verb|'r'|: reset orientation and zoom.
+  \item \verb|'m'|: toggle heightmap displacement on/off.
+  \item \verb|'['| / \verb|']'|: decrease / increase height exaggeration.
+  \item \verb|'v'|: toggle vertical flip of heightmap sampling.
+  \item \verb|'u'|: toggle horizontal flip of heightmap sampling.
+  \item \verb|'t'|: transpose heightmap sampling (swap \(u\) and \(v\)).
+  \item \verb|'o'|: add 180° longitude offset (\(u \mathrel{+}= 0.5\)).
+  \item \verb|'s'|: toggle smoothing of height sampling.
+  \item Right-click: open texture menu to pick a new color texture (auto-loads corresponding \verb|_Bar.png| overlay if present).
+  \item ESC: quit.
+\end{itemize}
+
+\section{Build \& run}
+Make sure you have GLUT/GLU and OpenGL development libraries installed, and \verb|stb_image.h| in the same directory.
+
+\begin{verbatim}
+g++ main.cpp -o earth -lGL -lGLU -lglut -lm -std=c++11
+\end{verbatim}
+
+Run (defaults):
+
+\begin{verbatim}
+./earth earth.png earth_elevation_grayscale.png
+\end{verbatim}
+
+You may pass a different color texture and/or heightmap as command-line arguments.
+
+\section{Troubleshooting \& orientation checklist}
+If geographic features do not align between the color texture and heightmap (e.g., Antarctica appears at the top, Africa looks upside-down, Himalayas flattened):
+\begin{enumerate}
+  \item Press \verb|'t'| (transpose) — many heightmaps are saved transposed relative to the colormap.
+  \item Press \verb|'v'| to flip vertically if the image rows are inverted.
+  \item Press \verb|'u'| to flip horizontally if left/right is reversed.
+  \item Press \verb|'o'| to add a 180° longitude offset if the prime meridian is centered incorrectly.
+  \item Toggle \verb|'s'| smoothing to reduce pole spikes; then adjust height scale (use \verb|']'| / \verb|'['|) to visualize mountains clearly.
+\end{enumerate}
+
+If you see seams or spikes at the poles, increase smoothing or reduce \texttt{heightScale}. If the terrain looks too flat, increase \texttt{heightScale} with \verb|']'|.
+
+\section{Performance \& tuning}
+\begin{itemize}
+  \item Lower \texttt{meshStacks} and \texttt{meshSlices} to reduce vertex count for faster frame rates (e.g., 64×128).
+  \item Convert mesh generation and rendering to VBOs/VAOs for better performance and to avoid re-uploading large client arrays.
+  \item Cache the heightmap as a float array (instead of reading bytes each sample) if you plan to sample it heavily or implement higher-quality filtering.
+  \item Use a shader-based pipeline (GLSL) if you want GPU displacement (tessellation or vertex shader) or normal mapping for more realistic lighting.
+\end{itemize}
+
+\section{Possible future improvements}
+\begin{itemize}
+  \item GPU-based displacement and normal calculation (GLSL + VBOs) to offload work from CPU.
+  \item Add a water layer at fixed radius (sea level) so oceans remain flat while land is displaced.
+  \item Add dynamic LOD: higher resolution near the camera-facing hemisphere, lower elsewhere.
+  \item Implement automatic orientation detection: test combinations of flips/transpose/offset and pick the one where southernmost latitudes contain mostly ocean (heuristic).
+  \item Add UI controls (on-screen GUI) to change textures, toggles and sliders instead of keyboard/menu.
+\end{itemize}
+
+\section{Attribution \& license}
+\begin{itemize}
+  \item Image loading: \verb|stb_image.h| by Sean Barrett (public domain / MIT-compatible).
+  \item This code is provided as-is. Feel free to reuse or adapt it; if you publish derived work, a quick mention is appreciated but not required.
+\end{itemize}
+
+\end{document}
+
